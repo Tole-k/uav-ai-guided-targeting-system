@@ -1,5 +1,11 @@
+import torch
 from ultralytics import YOLO
 
-model = YOLO("yolo26x-obb.pt")
 
-model.train(data="data/hit-uav/dataset.yaml")
+def main():
+    model = YOLO("yolo26x.pt")
+    device = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu"
+    model.train(data="data/hit-uav/dataset.yaml", epochs=200, device=device)
+
+if __name__=="__main__":
+    main()
