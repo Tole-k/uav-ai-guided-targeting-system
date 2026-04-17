@@ -29,10 +29,10 @@ def main():
         else "cpu"
     )
 
-    model = YOLO("yolo26x.pt")
+    model = YOLO("yolo26x-obb.pt")
     model.train(
         data=DATA,
-        epochs=1,
+        epochs=60,
         device=device,
         freeze=BACKBONE_FREEZE,
         batch=-1,
@@ -45,7 +45,7 @@ def main():
 
     model.train(
         data=DATA,
-        epochs=1,
+        epochs=140,
         device=device,
         batch=-1,
         compile=True,
