@@ -32,6 +32,8 @@ def main():
     model = YOLO("yolo26x-obb.pt")
     model.train(
         data=DATA,
+        imgsz=640,
+        rect=True,
         epochs=60,
         device=device,
         freeze=BACKBONE_FREEZE,
@@ -39,22 +41,27 @@ def main():
         compile=True,
         lr0=0.01,
         lrf=0.01,
+        exist_ok=True,
         name="phase1",
         **augmentation_params,
     )
 
+    model = YOLO("runs/obb/phase1/weights/best.pt")
+    # model = YOLO("runs/obb/phase2/weights/last.pt")
     model.train(
         data=DATA,
-        epochs=140,
+        imgsz=640,
+        rect=True,
+        epochs=140 - 50,
         device=device,
         batch=-1,
-        compile=True,
         lr0=0.001,
         lrf=0.01,
         name="phase2",
+        exist_ok=True,
         **augmentation_params,
     )
-
+    model = YOLO("runs/obb/phase2/weights/best.pt")
     model.val(classes=[0, 1, 2, 3])
 
 
