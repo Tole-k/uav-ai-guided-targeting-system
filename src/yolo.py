@@ -52,7 +52,7 @@ def main():
         data=DATA,
         imgsz=640,
         rect=True,
-        epochs=140 - 50,
+        epochs=140,
         device=device,
         batch=-1,
         lr0=0.001,
