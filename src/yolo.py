@@ -6,15 +6,18 @@ from ultralytics.nn.tasks import OBBModel
 from ultralytics.utils import RANK
 from ultralytics.utils.loss import E2ELoss, v8OBBLoss
 
-DATA = "/home/jedrzej/Desktop/masters/machine_perception/uav-ai-guided-targeting-system/dataset.yaml"
+DATA = "dataset.yaml"
 BACKBONE_FREEZE = 10
-BATCH_SIZE = 4
 
 # Provide one proportion per class in dataset.yaml order:
 # Person, Car, Bicycle, OtherVehicle, DontCare
 
 # MACRO
 CLASS_PROPORTIONS = [12312,7311, 4980, 148, 148]
+
+
+# SOTA CLASS WEIGHTING
+BETA = 0.999
 
 augmentation_params = {
     "fliplr": 0.5,  # horizontal flip — people/vehicles are symmetric
@@ -41,8 +44,7 @@ def proportions_to_pos_weight(proportions):
 
     # Inverse-frequency weights normalized to mean 1 to avoid changing
     # the overall classification-loss scale too aggressively.
-    weights = 1.0 / probs
-    return weights / weights.mean()
+    return (1-BETA)/(1-BETA**probs)
 
 
 class WeightedOBBLoss(v8OBBLoss):
@@ -107,6 +109,7 @@ def main():
         if torch.mps.is_available()
         else "cpu"
     )
+    print(f"{device=}")
 
     model = YOLO("yolo26x-obb.pt")
     model.train(
@@ -117,7 +120,7 @@ def main():
         epochs=60,
         device=device,
         freeze=BACKBONE_FREEZE,
-        batch=BATCH_SIZE,
+        batch=-1,
         compile=True,
         lr0=0.01,
         lrf=0.01,
@@ -133,16 +136,16 @@ def main():
         trainer=WeightedOBBTrainer,
         imgsz=640,
         rect=True,
-        epochs=140 - 50,
+        epochs=140,
         device=device,
-        batch=BATCH_SIZE,
+        batch=-1,
         lr0=0.001,
         lrf=0.01,
-        name="phase2",
+        name="final",
         exist_ok=True,
         **augmentation_params,
     )
-    model = YOLO("runs/obb/phase2/weights/best.pt")
+    model = YOLO("runs/obb/final/weights/best.pt")
     model.val(classes=[0, 1, 2, 3])
 
 
