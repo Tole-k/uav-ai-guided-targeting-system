@@ -145,7 +145,7 @@ def main():
         exist_ok=True,
         **augmentation_params,
     )
-    model = YOLO("runs/obb/final/weights/best.pt")
+    model = YOLO("runs/obb/phase2/weights/best.pt")
     model.val(classes=[0, 1, 2, 3])
 
 

@@ -13,3 +13,7 @@ data
 *.pt
 runs/
 Inference/
+
+night_*
+
+day_*
