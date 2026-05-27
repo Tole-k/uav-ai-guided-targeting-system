@@ -4,7 +4,7 @@ from ultralytics import YOLO
 from ultralytics.models.yolo.obb import OBBTrainer
 from ultralytics.nn.tasks import OBBModel
 from ultralytics.utils import RANK
-from ultralytics.utils.loss import E2ELoss, v8OBBLoss
+from ultralytics.utils.loss import E2ELoss, v8OBBLoss, FocalLoss
 
 DATA = "dataset.yaml"
 BACKBONE_FREEZE = 10
@@ -60,6 +60,12 @@ class WeightedOBBLoss(v8OBBLoss):
                 reduction="none",
             )
 
+class Focalloss(v8OBBLoss):
+    def __init__(self, model):
+        super().__init__(model)
+        
+        self.bce = FocalLoss(2)
+
 
 class WeightedOBBE2ELoss(E2ELoss):
     def __init__(self, model, class_pos_weight=None):
@@ -70,8 +76,10 @@ class WeightedOBBE2ELoss(E2ELoss):
                 tal_topk=tal_topk,
                 tal_topk2=tal_topk2,
             )
+        def focal_loss(model):
+            return Focalloss(model)
 
-        super().__init__(model, loss_fn=weighted_loss_fn)
+        super().__init__(model, loss_fn=focal_loss)
 
 
 class WeightedOBBModel(OBBModel):
