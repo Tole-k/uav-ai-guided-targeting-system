@@ -61,8 +61,8 @@ class WeightedOBBLoss(v8OBBLoss):
             )
 
 class Focalloss(v8OBBLoss):
-    def __init__(self, model):
-        super().__init__(model)
+    def __init__(self, model, class_pos_weight=None, tal_topk=10, tal_topk2=None):
+        super().__init__(model, tal_topk=tal_topk, tal_topk2=tal_topk2)
         
         self.bce = FocalLoss(2)
 
@@ -76,8 +76,8 @@ class WeightedOBBE2ELoss(E2ELoss):
                 tal_topk=tal_topk,
                 tal_topk2=tal_topk2,
             )
-        def focal_loss(model):
-            return Focalloss(model)
+        def focal_loss(model, tal_topk=10, tal_topk2=None):
+            return Focalloss(model, tal_topk=10, tal_topk2=None)
 
         super().__init__(model, loss_fn=focal_loss)
 
@@ -133,11 +133,11 @@ def main():
         lr0=0.01,
         lrf=0.01,
         exist_ok=True,
-        name="phase1",
+        name="phase1-focal",
         **augmentation_params,
     )
 
-    model = YOLO("runs/obb/phase1/weights/best.pt")
+    model = YOLO("runs/obb/phase1-focal/weights/best.pt")
     # model = YOLO("runs/obb/phase2/weights/last.pt")
     model.train(
         data=DATA,
@@ -149,11 +149,11 @@ def main():
         batch=-1,
         lr0=0.001,
         lrf=0.01,
-        name="final",
+        name="phase2-focal",
         exist_ok=True,
         **augmentation_params,
     )
-    model = YOLO("runs/obb/phase2/weights/best.pt")
+    model = YOLO("runs/obb/phase2-focal/weights/best.pt")
     model.val(classes=[0, 1, 2, 3])
 
 
