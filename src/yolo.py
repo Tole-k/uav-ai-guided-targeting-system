@@ -1,10 +1,8 @@
 import torch
-from torch import nn
 from ultralytics import YOLO
-from ultralytics.models.yolo.obb import OBBTrainer
-from ultralytics.nn.tasks import OBBModel
-from ultralytics.utils import RANK
-from ultralytics.utils.loss import E2ELoss, v8OBBLoss, FocalLoss
+from ultralytics.utils.loss import E2ELoss
+
+from custom_loss import v8OBBLoss
 
 DATA = "dataset.yaml"
 BACKBONE_FREEZE = 10
@@ -13,7 +11,7 @@ BACKBONE_FREEZE = 10
 # Person, Car, Bicycle, OtherVehicle, DontCare
 
 # MACRO
-CLASS_PROPORTIONS = [12312,7311, 4980, 148, 148]
+CLASS_PROPORTIONS = [12312, 7311, 4980, 148, 148]
 
 
 # SOTA CLASS WEIGHTING
@@ -35,78 +33,14 @@ augmentation_params = {
 }
 
 
-def proportions_to_pos_weight(proportions):
-    probs = torch.tensor(proportions, dtype=torch.float32)
-    if probs.ndim != 1:
-        raise ValueError("CLASS_PROPORTIONS must be a 1D list of class frequencies.")
-    if torch.any(probs <= 0):
-        raise ValueError("CLASS_PROPORTIONS entries must be strictly positive.")
-
-    # Inverse-frequency weights normalized to mean 1 to avoid changing
-    # the overall classification-loss scale too aggressively.
-    return (1-BETA)/(1-BETA**probs)
-
-
-class WeightedOBBLoss(v8OBBLoss):
-    def __init__(self, model, class_pos_weight=None, tal_topk=10, tal_topk2=None):
-        super().__init__(model, tal_topk=tal_topk, tal_topk2=tal_topk2)
-        if class_pos_weight is not None:
-            # The weighting happens here:
-            # v8OBBLoss uses self.bce for the classification term, so by replacing
-            # it with BCEWithLogitsLoss(pos_weight=...), positive examples for rare
-            # classes contribute more to the class-loss part.
-            self.bce = nn.BCEWithLogitsLoss(
-                pos_weight=class_pos_weight.to(self.device),
-                reduction="none",
-            )
-
-class Focalloss(v8OBBLoss):
-    def __init__(self, model, class_pos_weight=None, tal_topk=10, tal_topk2=None):
-        super().__init__(model, tal_topk=tal_topk, tal_topk2=tal_topk2)
-        
-        self.bce = FocalLoss(2)
-
-
-class WeightedOBBE2ELoss(E2ELoss):
-    def __init__(self, model, class_pos_weight=None):
-        def weighted_loss_fn(model, tal_topk=10, tal_topk2=None):
-            return WeightedOBBLoss(
-                model,
-                class_pos_weight=class_pos_weight,
-                tal_topk=tal_topk,
-                tal_topk2=tal_topk2,
-            )
-        def focal_loss(model, tal_topk=10, tal_topk2=None):
-            return Focalloss(model, tal_topk=10, tal_topk2=None)
-
-        super().__init__(model, loss_fn=focal_loss)
-
-
-class WeightedOBBModel(OBBModel):
-    #def __init__(self, cfg="yolo26n-obb.yaml", ch=3, nc=None, verbose=True, class_pos_weight=None):
-        
-        #super().__init__(cfg=cfg, ch=ch, nc=nc, verbose=verbose)
-       
-        #self._class_pos_weight = class_pos_weight
-
-    def init_criterion(self):
-        weights = proportions_to_pos_weight(CLASS_PROPORTIONS)
-        if getattr(self, "end2end", False):
-            return WeightedOBBE2ELoss(self, class_pos_weight=weights)
-        return WeightedOBBLoss(self, class_pos_weight=weights)
-
-
-class WeightedOBBTrainer(OBBTrainer):
-    def get_model(self, cfg=None, weights=None, verbose=True):
-        #class_pos_weight = proportions_to_pos_weight(self.args.class_proportions)
-        model = WeightedOBBModel(
-            cfg,
-            nc=self.data["nc"],
-            verbose=verbose and RANK == -1,
-        )
-        # if weights:
-        #     model.load(weights)
-        return model
+def use_varifocal_obb_loss(model):
+    obb_model = model.model
+    obb_model.criterion = (
+        E2ELoss(obb_model, v8OBBLoss)
+        if getattr(obb_model, "end2end", False)
+        else v8OBBLoss(obb_model)
+    )
+    return model
 
 
 def main():
@@ -120,9 +54,9 @@ def main():
     print(f"{device=}")
 
     model = YOLO("yolo26x-obb.pt")
+    use_varifocal_obb_loss(model)
     model.train(
         data=DATA,
-        trainer=WeightedOBBTrainer,
         imgsz=640,
         rect=True,
         epochs=60,
@@ -133,15 +67,14 @@ def main():
         lr0=0.01,
         lrf=0.01,
         exist_ok=True,
-        name="phase1-focal",
+        name="phase1-verifocal",
         **augmentation_params,
     )
 
-    model = YOLO("runs/obb/phase1-focal/weights/best.pt")
-    # model = YOLO("runs/obb/phase2/weights/last.pt")
+    model = YOLO("runs/obb/phase1-verifocal/weights/best.pt")
+    use_varifocal_obb_loss(model)
     model.train(
         data=DATA,
-        trainer=WeightedOBBTrainer,
         imgsz=640,
         rect=True,
         epochs=140,
@@ -149,12 +82,12 @@ def main():
         batch=-1,
         lr0=0.001,
         lrf=0.01,
-        name="phase2-focal",
+        name="phase2-verifocal",
         exist_ok=True,
         **augmentation_params,
     )
-    model = YOLO("runs/obb/phase2-focal/weights/best.pt")
-    model.val(classes=[0, 1, 2, 3])
+    model = YOLO("runs/obb/phase2-verifocal/weights/best.pt")
+    model.val(classes=[0, 1, 2, 3], name="val-verifocal")
 
 
 if __name__ == "__main__":
